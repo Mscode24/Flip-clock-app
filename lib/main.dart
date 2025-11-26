@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math'; // Required for 3D flip math
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -8,18 +8,11 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:battery_plus/battery_plus.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // REQUIRED
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-
-  SystemChrome.setPreferredOrientations([
-    DeviceOrientation.landscapeLeft,
-    DeviceOrientation.landscapeRight,
-  ]);
-
-  SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   WakelockPlus.enable();
-
   runApp(const MyClockApp());
 }
 
@@ -84,6 +77,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    
+    // 1. Load Saved Settings on Startup
+    _loadSettings();
+    
     _getBatteryLevel();
     _batteryTimer = Timer.periodic(const Duration(minutes: 1), (_) => _getBatteryLevel());
   }
@@ -91,6 +88,60 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _getBatteryLevel() async {
     final level = await _battery.batteryLevel;
     if (mounted) setState(() => _batteryLevel = level);
+  }
+
+  // --- PERSISTENCE LOGIC (SAVE/LOAD) ---
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _scaleFactor = prefs.getDouble('scaleFactor') ?? 1.0;
+      _auxScaleFactor = prefs.getDouble('auxScaleFactor') ?? 1.0;
+      
+      // Load Colors
+      int? cardColorVal = prefs.getInt('cardColor');
+      int? digitColorVal = prefs.getInt('digitColor');
+      if (cardColorVal != null) _theme.cardColor = Color(cardColorVal);
+      if (digitColorVal != null) _theme.digitColor = Color(digitColorVal);
+
+      // Load Image
+      String? bgPath = prefs.getString('bgPath');
+      if (bgPath != null && File(bgPath).existsSync()) {
+        _theme.backgroundImage = File(bgPath);
+      }
+
+      // Load Orientation
+      _isLandscape = prefs.getBool('isLandscape') ?? true;
+      _applyOrientation();
+    });
+  }
+
+  Future<void> _saveSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    prefs.setDouble('scaleFactor', _scaleFactor);
+    prefs.setDouble('auxScaleFactor', _auxScaleFactor);
+    prefs.setInt('cardColor', _theme.cardColor.value);
+    prefs.setInt('digitColor', _theme.digitColor.value);
+    prefs.setBool('isLandscape', _isLandscape);
+    
+    if (_theme.backgroundImage != null) {
+      prefs.setString('bgPath', _theme.backgroundImage!.path);
+    } else {
+      prefs.remove('bgPath');
+    }
+  }
+
+  void _applyOrientation() {
+    if (_isLandscape) {
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft, 
+        DeviceOrientation.landscapeRight
+      ]);
+    } else {
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp, 
+        DeviceOrientation.portraitDown
+      ]);
+    }
   }
 
   @override
@@ -110,18 +161,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     setState(() {
       _isLandscape = !_isLandscape;
     });
-    
-    if (_isLandscape) {
-      SystemChrome.setPreferredOrientations([
-        DeviceOrientation.landscapeLeft, 
-        DeviceOrientation.landscapeRight
-      ]);
-    } else {
-      SystemChrome.setPreferredOrientations([
-        DeviceOrientation.portraitUp, 
-        DeviceOrientation.portraitDown
-      ]);
-    }
+    _applyOrientation();
+    _saveSettings(); // Save
     Navigator.pop(context); 
   }
 
@@ -129,18 +170,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     setState(() {
       _scaleFactor = (_scaleFactor + delta).clamp(0.5, 2.0);
     });
+    _saveSettings(); // Save
   }
 
   void _adjustAuxSize(double delta) {
     setState(() {
       _auxScaleFactor = (_auxScaleFactor + delta).clamp(0.5, 2.5);
     });
+    _saveSettings(); // Save
   }
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-    if (image != null) setState(() => _theme.backgroundImage = File(image.path));
+    if (image != null) {
+      setState(() => _theme.backgroundImage = File(image.path));
+      _saveSettings(); // Save
+    }
   }
 
   void _pickColor(bool isCard) {
@@ -167,6 +213,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 if (isCard) _theme.cardColor = tempColor;
                 else _theme.digitColor = tempColor;
               });
+              _saveSettings(); // Save
               Navigator.pop(context);
             },
           ),
@@ -231,7 +278,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           _buildSettingsIcon(Icons.format_paint, "Card Color", () => _pickColor(true)),
                           _buildSettingsIcon(Icons.text_fields, "Font Color", () => _pickColor(false)),
                           if (_theme.backgroundImage != null)
-                            _buildSettingsIcon(Icons.delete_outline, "Reset BG", () => setState(() => _theme.backgroundImage = null)),
+                            _buildSettingsIcon(Icons.delete_outline, "Reset BG", () {
+                              setState(() => _theme.backgroundImage = null);
+                              _saveSettings();
+                            }),
                         ],
                       ),
                       const SizedBox(height: 20),
@@ -397,7 +447,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 }
 
-// --- CLOCK DISPLAY ---
+// --- CLOCK DISPLAY (ANIMATED) ---
 class ClockDisplay extends StatefulWidget {
   final CustomTheme theme;
   final double scaleFactor;
@@ -459,7 +509,7 @@ class _ClockDisplayState extends State<ClockDisplay> {
                 ? Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // HOUR CARD (FLIPPABLE)
+                      // HOUR CARD (ANIMATED)
                       FlippableCard(
                         mainText: hour, 
                         topLabel: dateText,
@@ -469,7 +519,7 @@ class _ClockDisplayState extends State<ClockDisplay> {
                         auxScale: widget.auxScaleFactor,
                       ),
                       SizedBox(width: finalSize * 0.05),
-                      // MINUTE CARD (FLIPPABLE)
+                      // MINUTE CARD (ANIMATED)
                       FlippableCard(
                         mainText: minute, 
                         topLabel: dayText,
@@ -509,7 +559,7 @@ class _ClockDisplayState extends State<ClockDisplay> {
   }
 }
 
-// --- STOPWATCH DISPLAY ---
+// --- STOPWATCH DISPLAY (STATIC - NO ANIMATION) ---
 class StopwatchDisplay extends StatefulWidget {
   final CustomTheme theme;
   final double scaleFactor;
@@ -569,11 +619,12 @@ class _StopwatchDisplayState extends State<StopwatchDisplay> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    FlippableCard(mainText: parts[0], size: finalSize, theme: widget.theme),
+                    // USING STATIC DigitCard HERE (Not FlippableCard)
+                    DigitCard(mainText: parts[0], size: finalSize, theme: widget.theme),
                     Text(":", style: TextStyle(fontSize: finalSize * 0.5, color: Colors.white54)),
-                    FlippableCard(mainText: parts[1], size: finalSize, theme: widget.theme),
+                    DigitCard(mainText: parts[1], size: finalSize, theme: widget.theme),
                     Text(".", style: TextStyle(fontSize: finalSize * 0.5, color: Colors.white54)),
-                    FlippableCard(mainText: parts[2], size: finalSize * 0.7, theme: widget.theme),
+                    DigitCard(mainText: parts[2], size: finalSize * 0.7, theme: widget.theme),
                   ],
                 ),
                 SizedBox(height: finalSize * 0.2),
@@ -604,7 +655,7 @@ class _StopwatchDisplayState extends State<StopwatchDisplay> {
   }
 }
 
-// --- NEW FLIPPABLE CARD WIDGET ---
+// --- FLIPPABLE CARD WIDGET ---
 class FlippableCard extends StatelessWidget {
   final String mainText;
   final double size;
@@ -627,13 +678,10 @@ class FlippableCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // We use AnimatedSwitcher to flip between the "Old" DigitCard and the "New" DigitCard
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 450), // Speed of the flip
+      duration: const Duration(milliseconds: 450), 
       transitionBuilder: (Widget child, Animation<double> animation) {
-        // Create a Rotation Effect on the X Axis (Vertical Flip)
         final rotateAnim = Tween(begin: pi, end: 0.0).animate(animation);
-        
         return AnimatedBuilder(
           animation: rotateAnim,
           child: child,
@@ -644,14 +692,13 @@ class FlippableCard extends StatelessWidget {
             final value = isUnder ? min(rotateAnim.value, pi / 2) : rotateAnim.value;
             
             return Transform(
-              transform: Matrix4.rotationX(value)..setEntry(3, 2, 0.001), // 0.001 adds 3D perspective
+              transform: Matrix4.rotationX(value)..setEntry(3, 2, 0.001), 
               alignment: Alignment.center,
               child: child,
             );
           },
         );
       },
-      // IMPORTANT: Key must change for animation to trigger
       child: DigitCard(
         key: ValueKey(mainText), 
         mainText: mainText,
@@ -666,7 +713,7 @@ class FlippableCard extends StatelessWidget {
   }
 }
 
-// --- VISUAL DIGIT CARD ---
+// --- STATIC DIGIT CARD ---
 class DigitCard extends StatelessWidget {
   final String mainText;
   final double size;
