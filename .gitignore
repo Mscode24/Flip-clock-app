@@ -1,0 +1,43 @@
+cat <<EOF > .gitignore
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+
+# Flutter/Dart/Pub related
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+/build/
+/ios/Pods/
+/ios/.symlinks/
+/ios/Flutter/App.framework
+/ios/Flutter/engine.xcconfig
+/ios/Flutter/Generated.xcframework
+/ios/Flutter/flutter_export_environment.sh
+/ios/Flutter/pod_runner.xcconfig
+/ios/Runner/Assets.xcassets/AppIcon.appiconset/
+/ios/Runner/GeneratedPluginRegistrant.*
+
+# Android related
+/android/key.properties
+/android/local.properties
+/android/.gradle/
+/android/app/src/main/assets/flutter_assets/
+/android/gradle/
+/android/gradlew
+/android/gradlew.bat
+
+# IDE specific
+.idea/
+.vscode/
+*.iml
+*.ipr
+EOF
