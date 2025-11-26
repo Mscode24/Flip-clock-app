@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math'; // Required for 3D flip math
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -11,13 +12,11 @@ import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. Start in Landscape by default
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ]);
 
-  // 2. Hide Status Bars and Navigation Bars completely
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   WakelockPlus.enable();
 
@@ -33,7 +32,7 @@ class MyClockApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Mega Flip Clock',
       theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: Colors.transparent, // Important: Transparent so BG shows through
+        scaffoldBackgroundColor: Colors.transparent,
         dialogBackgroundColor: const Color(0xFF222222),
       ),
       home: const HomeScreen(),
@@ -67,12 +66,14 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   AppMode _currentMode = AppMode.clock;
   
+  // Theme State
   final CustomTheme _theme = CustomTheme(
-    cardColor: const Color(0xFF222222),
-    digitColor: const Color(0xFFE0E0E0),
+    cardColor: const Color(0xFF3F51B5), 
+    digitColor: const Color(0xFFFFF9C4), 
   );
 
-  double _scaleFactor = 1.0; 
+  double _scaleFactor = 1.0;      
+  double _auxScaleFactor = 1.0;   
   bool _isLandscape = true; 
 
   final Battery _battery = Battery();
@@ -104,6 +105,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     setState(() {});
   }
 
+  // --- ACTIONS ---
   void _toggleOrientation() {
     setState(() {
       _isLandscape = !_isLandscape;
@@ -126,6 +128,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _adjustSize(double delta) {
     setState(() {
       _scaleFactor = (_scaleFactor + delta).clamp(0.5, 2.0);
+    });
+  }
+
+  void _adjustAuxSize(double delta) {
+    setState(() {
+      _auxScaleFactor = (_auxScaleFactor + delta).clamp(0.5, 2.5);
     });
   }
 
@@ -167,6 +175,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  // --- SETTINGS PANEL ---
   void _openSettings() {
     showModalBottomSheet(
       context: context,
@@ -175,9 +184,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            // Using MediaQuery to ensure height is safe, scrollable for landscape
             return SizedBox(
-              height: MediaQuery.of(context).size.height * 0.8,
+              height: MediaQuery.of(context).size.height * 0.85,
               child: SingleChildScrollView(
                 child: Padding(
                   padding: const EdgeInsets.all(25.0),
@@ -187,58 +195,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     children: [
                       const Center(child: Text("SETTINGS", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 3, fontSize: 18))),
                       const SizedBox(height: 25),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(10)),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text("Orientation", style: TextStyle(fontWeight: FontWeight.bold)),
-                            ElevatedButton.icon(
-                              onPressed: _toggleOrientation,
-                              icon: const Icon(Icons.screen_rotation),
-                              label: Text(_isLandscape ? "To Portrait" : "To Landscape"),
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
-                            ),
-                          ],
-                        ),
+
+                      _buildControlRow("Orientation", 
+                        ElevatedButton.icon(
+                          onPressed: _toggleOrientation,
+                          icon: const Icon(Icons.screen_rotation),
+                          label: Text(_isLandscape ? "To Portrait" : "To Landscape"),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+                        )
                       ),
                       const SizedBox(height: 15),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(10)),
-                        child: Column(
-                          children: [
-                            const Text("Clock Size", style: TextStyle(fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 10),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                IconButton(
-                                  onPressed: () { _adjustSize(-0.1); setModalState((){}); },
-                                  icon: const Icon(Icons.remove_circle_outline, size: 35),
-                                  color: Colors.redAccent,
-                                ),
-                                Container(
-                                  width: 60,
-                                  alignment: Alignment.center,
-                                  child: Text("${(_scaleFactor * 100).toInt()}%", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                                ),
-                                IconButton(
-                                  onPressed: () { _adjustSize(0.1); setModalState((){}); },
-                                  icon: const Icon(Icons.add_circle_outline, size: 35),
-                                  color: Colors.greenAccent,
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
+
+                      _buildSizeControl("Clock Size", _scaleFactor, (v) { _adjustSize(v); setModalState((){}); }),
+                      const SizedBox(height: 15),
+
+                      _buildSizeControl("Info Size (Date/Sec)", _auxScaleFactor, (v) { _adjustAuxSize(v); setModalState((){}); }),
+
                       const SizedBox(height: 25),
                       const Text("MODE & THEME", style: TextStyle(color: Colors.white54, fontSize: 12)),
                       const SizedBox(height: 10),
+
                       Row(
                         children: [
                           Expanded(child: _modeButton("CLOCK", AppMode.clock, setModalState)),
@@ -247,6 +223,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         ],
                       ),
                       const SizedBox(height: 20),
+
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -266,6 +243,55 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           }
         );
       },
+    );
+  }
+
+  Widget _buildControlRow(String label, Widget child) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(10)),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSizeControl(String label, double value, Function(double) onAdjust) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(10)),
+      child: Column(
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                onPressed: () => onAdjust(-0.1),
+                icon: const Icon(Icons.remove_circle_outline, size: 30),
+                color: Colors.redAccent,
+              ),
+              Container(
+                width: 60,
+                alignment: Alignment.center,
+                child: Text("${(value * 100).toInt()}%", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              ),
+              IconButton(
+                onPressed: () => onAdjust(0.1),
+                icon: const Icon(Icons.add_circle_outline, size: 30),
+                color: Colors.greenAccent,
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -306,20 +332,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    // FIX: Using a Stack allows the background to exist BEHIND the Scaffold,
-    // ensuring it fills the notch and camera areas completely.
     return Stack(
       children: [
-        // LAYER 1: Background Image (Fills Screen Completely)
         Positioned.fill(
           child: Container(
             decoration: BoxDecoration(
               color: Colors.black,
               image: _theme.backgroundImage != null 
-                ? DecorationImage(
-                    image: FileImage(_theme.backgroundImage!), 
-                    fit: BoxFit.cover, // Ensures image fills notch/camera areas
-                  )
+                ? DecorationImage(image: FileImage(_theme.backgroundImage!), fit: BoxFit.cover)
                 : null,
               gradient: _theme.backgroundImage == null 
                 ? const LinearGradient(
@@ -329,24 +349,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ),
           ),
         ),
-
-        // LAYER 2: Application UI (Transparent Scaffold)
         Scaffold(
-          backgroundColor: Colors.transparent, // Let background show through
-          resizeToAvoidBottomInset: false, // Prevent keyboard/bottom overflow
+          backgroundColor: Colors.transparent, 
+          resizeToAvoidBottomInset: false, 
           body: Stack(
             children: [
-              // CLOCK / STOPWATCH
               Positioned.fill(
                 child: Padding(
                   padding: const EdgeInsets.all(10.0),
                   child: _currentMode == AppMode.clock
-                    ? ClockDisplay(theme: _theme, scaleFactor: _scaleFactor)
+                    ? ClockDisplay(
+                        theme: _theme, 
+                        scaleFactor: _scaleFactor, 
+                        auxScaleFactor: _auxScaleFactor
+                      )
                     : StopwatchDisplay(theme: _theme, scaleFactor: _scaleFactor),
                 ),
               ),
-
-              // BATTERY INDICATOR
               Positioned(
                 top: 15, right: 15,
                 child: Container(
@@ -361,8 +380,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ),
                 ),
               ),
-
-              // SETTINGS BUTTON
               Positioned(
                 bottom: 30, right: 30,
                 child: FloatingActionButton(
@@ -384,7 +401,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 class ClockDisplay extends StatefulWidget {
   final CustomTheme theme;
   final double scaleFactor;
-  const ClockDisplay({super.key, required this.theme, required this.scaleFactor});
+  final double auxScaleFactor;
+
+  const ClockDisplay({
+    super.key, 
+    required this.theme, 
+    required this.scaleFactor,
+    required this.auxScaleFactor,
+  });
 
   @override
   State<ClockDisplay> createState() => _ClockDisplayState();
@@ -416,27 +440,17 @@ class _ClockDisplayState extends State<ClockDisplay> {
         String hour = DateFormat('hh').format(_now);
         String minute = DateFormat('mm').format(_now);
         String second = DateFormat('ss').format(_now);
-        String amPm = DateFormat('a').format(_now);
+        String amPm = DateFormat('a').format(_now).toUpperCase();
+        
+        String dateText = DateFormat('dd/MM/yy').format(_now); 
+        String dayText = DateFormat('EEEE').format(_now); 
 
         double shortSide = constraints.maxWidth < constraints.maxHeight 
             ? constraints.maxWidth 
             : constraints.maxHeight;
-            
-        double baseSize = shortSide * 0.55; 
+        
+        double baseSize = isLandscape ? shortSide * 0.75 : shortSide * 0.55; 
         double finalSize = baseSize * widget.scaleFactor;
-
-        // Seconds Badge
-        Widget secondsBadge = Container(
-          padding: EdgeInsets.all(finalSize * 0.05),
-          child: Text(
-            second,
-            style: TextStyle(
-              fontSize: finalSize * 0.25, 
-              fontWeight: FontWeight.bold,
-              color: Colors.redAccent, 
-            ),
-          ),
-        );
 
         return Center(
           child: FittedBox(
@@ -444,49 +458,47 @@ class _ClockDisplayState extends State<ClockDisplay> {
             child: isLandscape
                 ? Row(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      DigitCard(text: hour, size: finalSize, theme: widget.theme),
-                      SizedBox(width: finalSize * 0.1),
-                      DigitCard(
-                        text: minute, 
+                      // HOUR CARD (FLIPPABLE)
+                      FlippableCard(
+                        mainText: hour, 
+                        topLabel: dateText,
+                        bottomLeftLabel: amPm,
                         size: finalSize, 
                         theme: widget.theme,
-                        badge: secondsBadge, 
+                        auxScale: widget.auxScaleFactor,
                       ),
-                      SizedBox(width: finalSize * 0.1),
-                      Padding(
-                        padding: EdgeInsets.only(bottom: finalSize * 0.1),
-                        child: Text(
-                          amPm, 
-                          style: TextStyle(
-                            color: widget.theme.digitColor, 
-                            fontSize: finalSize * 0.25, 
-                            fontWeight: FontWeight.bold
-                          )
-                        ),
+                      SizedBox(width: finalSize * 0.05),
+                      // MINUTE CARD (FLIPPABLE)
+                      FlippableCard(
+                        mainText: minute, 
+                        topLabel: dayText,
+                        bottomRightLabel: second,
+                        size: finalSize, 
+                        theme: widget.theme,
+                        auxScale: widget.auxScaleFactor,
                       ),
                     ],
                   )
                 : Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      DigitCard(text: hour, size: finalSize, theme: widget.theme),
-                      SizedBox(height: finalSize * 0.1),
-                      DigitCard(
-                        text: minute, 
+                      FlippableCard(
+                        mainText: hour, 
+                        topLabel: dateText,
+                        bottomLeftLabel: amPm,
                         size: finalSize, 
                         theme: widget.theme,
-                        badge: secondsBadge,
+                        auxScale: widget.auxScaleFactor,
                       ),
-                      SizedBox(height: finalSize * 0.1),
-                      Text(
-                        amPm, 
-                        style: TextStyle(
-                          color: widget.theme.digitColor, 
-                          fontSize: finalSize * 0.2, 
-                          fontWeight: FontWeight.bold
-                        )
+                      SizedBox(height: finalSize * 0.05),
+                      FlippableCard(
+                        mainText: minute, 
+                        topLabel: dayText,
+                        bottomRightLabel: second,
+                        size: finalSize, 
+                        theme: widget.theme,
+                        auxScale: widget.auxScaleFactor,
                       ),
                     ],
                   ),
@@ -557,11 +569,11 @@ class _StopwatchDisplayState extends State<StopwatchDisplay> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    DigitCard(text: parts[0], size: finalSize, theme: widget.theme),
+                    FlippableCard(mainText: parts[0], size: finalSize, theme: widget.theme),
                     Text(":", style: TextStyle(fontSize: finalSize * 0.5, color: Colors.white54)),
-                    DigitCard(text: parts[1], size: finalSize, theme: widget.theme),
+                    FlippableCard(mainText: parts[1], size: finalSize, theme: widget.theme),
                     Text(".", style: TextStyle(fontSize: finalSize * 0.5, color: Colors.white54)),
-                    DigitCard(text: parts[2], size: finalSize * 0.7, theme: widget.theme),
+                    FlippableCard(mainText: parts[2], size: finalSize * 0.7, theme: widget.theme),
                   ],
                 ),
                 SizedBox(height: finalSize * 0.2),
@@ -592,29 +604,101 @@ class _StopwatchDisplayState extends State<StopwatchDisplay> {
   }
 }
 
-// --- CARD UI ---
-class DigitCard extends StatelessWidget {
-  final String text;
+// --- NEW FLIPPABLE CARD WIDGET ---
+class FlippableCard extends StatelessWidget {
+  final String mainText;
   final double size;
   final CustomTheme theme;
-  final Widget? badge;
+  final String? topLabel;
+  final String? bottomLeftLabel;
+  final String? bottomRightLabel;
+  final double auxScale;
 
-  const DigitCard({
-    super.key, 
-    required this.text, 
-    required this.size, 
+  const FlippableCard({
+    super.key,
+    required this.mainText,
+    required this.size,
     required this.theme,
-    this.badge,
+    this.topLabel,
+    this.bottomLeftLabel,
+    this.bottomRightLabel,
+    this.auxScale = 1.0,
   });
 
   @override
   Widget build(BuildContext context) {
+    // We use AnimatedSwitcher to flip between the "Old" DigitCard and the "New" DigitCard
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 450), // Speed of the flip
+      transitionBuilder: (Widget child, Animation<double> animation) {
+        // Create a Rotation Effect on the X Axis (Vertical Flip)
+        final rotateAnim = Tween(begin: pi, end: 0.0).animate(animation);
+        
+        return AnimatedBuilder(
+          animation: rotateAnim,
+          child: child,
+          builder: (context, child) {
+            final isUnder = (ValueKey(mainText) != child?.key);
+            var tilt = ((animation.value - 0.5).abs() - 0.5) * 0.003;
+            tilt *= isUnder ? -1.0 : 1.0;
+            final value = isUnder ? min(rotateAnim.value, pi / 2) : rotateAnim.value;
+            
+            return Transform(
+              transform: Matrix4.rotationX(value)..setEntry(3, 2, 0.001), // 0.001 adds 3D perspective
+              alignment: Alignment.center,
+              child: child,
+            );
+          },
+        );
+      },
+      // IMPORTANT: Key must change for animation to trigger
+      child: DigitCard(
+        key: ValueKey(mainText), 
+        mainText: mainText,
+        size: size,
+        theme: theme,
+        topLabel: topLabel,
+        bottomLeftLabel: bottomLeftLabel,
+        bottomRightLabel: bottomRightLabel,
+        auxScale: auxScale,
+      ),
+    );
+  }
+}
+
+// --- VISUAL DIGIT CARD ---
+class DigitCard extends StatelessWidget {
+  final String mainText;
+  final double size;
+  final CustomTheme theme;
+  final String? topLabel;
+  final String? bottomLeftLabel;
+  final String? bottomRightLabel;
+  final double auxScale;
+
+  const DigitCard({
+    super.key, 
+    required this.mainText, 
+    required this.size, 
+    required this.theme,
+    this.topLabel,
+    this.bottomLeftLabel,
+    this.bottomRightLabel,
+    this.auxScale = 1.0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    double topFontSize = size * 0.08 * auxScale;
+    double cornerFontSize = size * 0.12 * auxScale;
+    double mainFontSize = size * 0.75;
+
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         color: theme.cardColor,
-        borderRadius: BorderRadius.circular(size * 0.1),
+        borderRadius: BorderRadius.circular(size * 0.15),
         boxShadow: [
           BoxShadow(color: Colors.black.withOpacity(0.5), offset: Offset(size*0.02, size*0.02), blurRadius: 10),
         ],
@@ -622,27 +706,57 @@ class DigitCard extends StatelessWidget {
       child: Stack(
         alignment: Alignment.center,
         children: [
+          if (topLabel != null)
+            Positioned(
+              top: size * 0.06,
+              child: Text(
+                topLabel!,
+                style: TextStyle(fontSize: topFontSize, fontWeight: FontWeight.bold, color: theme.digitColor),
+              ),
+            ),
+
           Text(
-            text, 
-            style: TextStyle(
-              fontSize: size * 0.75, 
-              fontWeight: FontWeight.w900, 
-              color: theme.digitColor, 
-              height: 0.9
-            )
+            mainText, 
+            style: TextStyle(fontSize: mainFontSize, fontWeight: FontWeight.w900, color: theme.digitColor, height: 0.9)
           ),
-          Positioned(top: size / 2, left: 0, right: 0, child: Container(height: size*0.015, color: Colors.black45)),
-          Positioned(top: 0, left: 0, right: 0, height: size / 2,
+
+          Positioned(
+            top: size / 2, 
+            left: 0, 
+            right: 0, 
+            child: Container(height: size * 0.008, color: Colors.black38)
+          ),
+
+          Positioned(
+            top: 0, left: 0, right: 0, height: size / 2,
             child: Container(decoration: BoxDecoration(
-                gradient: const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.white10, Colors.black12]),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(size * 0.1)),
+                gradient: const LinearGradient(
+                  begin: Alignment.topCenter, 
+                  end: Alignment.bottomCenter, 
+                  colors: [Colors.white10, Colors.transparent]
+                ),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(size * 0.15)),
             )),
           ),
-          if (badge != null)
+
+          if (bottomLeftLabel != null)
             Positioned(
-              bottom: 0,
-              right: 0,
-              child: badge!,
+              bottom: size * 0.06,
+              left: size * 0.08,
+              child: Text(
+                bottomLeftLabel!,
+                style: TextStyle(fontSize: cornerFontSize, fontWeight: FontWeight.bold, color: theme.digitColor),
+              ),
+            ),
+
+          if (bottomRightLabel != null)
+            Positioned(
+              bottom: size * 0.06,
+              right: size * 0.08,
+              child: Text(
+                bottomRightLabel!,
+                style: TextStyle(fontSize: cornerFontSize, fontWeight: FontWeight.bold, color: theme.digitColor),
+              ),
             ),
         ],
       ),
