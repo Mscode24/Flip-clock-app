@@ -25,10 +25,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final CustomTheme _theme = CustomTheme(
     cardColor: const Color(0xFF3F51B5), 
     digitColor: const Color(0xFFFFF9C4), 
+    cardOpacity: 1.0, // Default Solid
   );
 
   double _scaleFactor = 1.0; 
-  double _auxScaleFactor = 1.0; // Your new variable
+  double _auxScaleFactor = 1.0;
   bool _isLandscape = true; 
   bool _showSettingsIcon = false; 
   Timer? _controlsTimer;
@@ -37,11 +38,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _batteryLevel = 100;
   Timer? _batteryTimer;
 
-  // Alarm State
+  // Alarm
   TimeOfDay? _alarmTime;
   bool _alarmTriggered = false;
 
-  // Chess State
+  // Chess
   int _p1Ms = 300000;
   int _p2Ms = 300000;
   int _initialMs = 300000;
@@ -51,7 +52,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _activePlayer = 0; 
   bool _gameFinished = false;
   Timer? _chessTimer;
-  // Add these near other chess variables
+  
+  // Custom Chess Temp Vars
   int _customBaseMin = 10;
   int _customIncSec = 0;
 
@@ -60,7 +62,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     
-    // Load your Saved Settings
     _loadSettings();
 
     _getBatteryLevel();
@@ -90,6 +91,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     setState(() {
       _scaleFactor = prefs.getDouble('scaleFactor') ?? 1.0;
       _auxScaleFactor = prefs.getDouble('auxScaleFactor') ?? 1.0;
+      _theme.cardOpacity = prefs.getDouble('cardOpacity') ?? 1.0; // LOAD OPACITY
       
       int? cardColorVal = prefs.getInt('cardColor');
       int? digitColorVal = prefs.getInt('digitColor');
@@ -110,6 +112,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final prefs = await SharedPreferences.getInstance();
     prefs.setDouble('scaleFactor', _scaleFactor);
     prefs.setDouble('auxScaleFactor', _auxScaleFactor);
+    prefs.setDouble('cardOpacity', _theme.cardOpacity); // SAVE OPACITY
     prefs.setInt('cardColor', _theme.cardColor.value);
     prefs.setInt('digitColor', _theme.digitColor.value);
     prefs.setBool('isLandscape', _isLandscape);
@@ -251,10 +254,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   void _pauseChess() => setState(() => _activePlayer = 0);
   void _resetChess() => setState(() { _activePlayer = 0; _gameFinished = false; _p1Ms = _initialMs; _p2Ms = _initialMs; _p1Moves = 0; _p2Moves = 0; });
-  void _setChessTime(int minutes, int incSeconds) { setState(() { _initialMs = minutes * 60 * 1000; _incrementMs = incSeconds * 1000; _resetChess(); }); Navigator.pop(context); }
+  void _setChessTime(int minutes, int incSeconds) { setState(() { _initialMs = minutes * 60 * 1000; _incrementMs = incSeconds * 1000; _resetChess(); }); }
   void _finishGame(int winner) { setState(() { _activePlayer = 0; _gameFinished = true; }); HapticFeedback.heavyImpact(); }
 
-  // --- SETTINGS UI ---
   // --- SETTINGS UI ---
   void _openSettings() {
     _controlsTimer?.cancel();
@@ -277,87 +279,76 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       const Center(child: Text("SETTINGS", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 3, fontSize: 18))),
                       const SizedBox(height: 25),
 
-                      // --- CHESS SETTINGS (Visible only in Chess Mode) ---
+                      // --- TRANSPARENCY SLIDER (NEW) ---
+                      const Text("Card Opacity", style: TextStyle(color: Colors.white54, fontSize: 12)),
+                      const SizedBox(height: 5),
+                      Row(
+                        children: [
+                          const Icon(Icons.opacity, size: 20, color: Colors.white70),
+                          Expanded(
+                            child: Slider(
+                              value: _theme.cardOpacity,
+                              min: 0.2, max: 1.0,
+                              activeColor: Colors.blueAccent, inactiveColor: Colors.white24,
+                              onChanged: (value) {
+                                setModalState(() {
+                                  setState(() { _theme.cardOpacity = value; });
+                                });
+                              },
+                              onChangeEnd: (_) => _saveSettings(),
+                            ),
+                          ),
+                          Text("${(_theme.cardOpacity * 100).toInt()}%"),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // --- CHESS SETTINGS ---
                       if (_currentMode == AppMode.chess) ...[
                         const Text("CHESS: CUSTOM GAME", style: TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 10),
-                        
-                        // Custom Time Controls
                         Container(
                           padding: const EdgeInsets.all(15),
                           decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(10)),
                           child: Column(
                             children: [
-                              // Minutes Row
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   const Text("Minutes:", style: TextStyle(fontWeight: FontWeight.bold)),
-                                  Row(
-                                    children: [
-                                      IconButton(icon: const Icon(Icons.remove_circle, color: Colors.red), onPressed: () => setModalState(() => _customBaseMin = (_customBaseMin - 1).clamp(1, 180))),
-                                      SizedBox(width: 40, child: Center(child: Text("$_customBaseMin", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)))),
-                                      IconButton(icon: const Icon(Icons.add_circle, color: Colors.green), onPressed: () => setModalState(() => _customBaseMin = (_customBaseMin + 1).clamp(1, 180))),
-                                    ],
-                                  )
+                                  Row(children: [IconButton(icon: const Icon(Icons.remove_circle, color: Colors.red), onPressed: () => setModalState(() => _customBaseMin = (_customBaseMin - 1).clamp(1, 180))), SizedBox(width: 40, child: Center(child: Text("$_customBaseMin", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)))), IconButton(icon: const Icon(Icons.add_circle, color: Colors.green), onPressed: () => setModalState(() => _customBaseMin = (_customBaseMin + 1).clamp(1, 180)))])
                                 ],
                               ),
                               const Divider(color: Colors.white24),
-                              // Increment Row
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   const Text("Increment (sec):", style: TextStyle(fontWeight: FontWeight.bold)),
-                                  Row(
-                                    children: [
-                                      IconButton(icon: const Icon(Icons.remove_circle, color: Colors.red), onPressed: () => setModalState(() => _customIncSec = (_customIncSec - 1).clamp(0, 60))),
-                                      SizedBox(width: 40, child: Center(child: Text("$_customIncSec", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)))),
-                                      IconButton(icon: const Icon(Icons.add_circle, color: Colors.green), onPressed: () => setModalState(() => _customIncSec = (_customIncSec + 1).clamp(0, 60))),
-                                    ],
-                                  )
+                                  Row(children: [IconButton(icon: const Icon(Icons.remove_circle, color: Colors.red), onPressed: () => setModalState(() => _customIncSec = (_customIncSec - 1).clamp(0, 60))), SizedBox(width: 40, child: Center(child: Text("$_customIncSec", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)))), IconButton(icon: const Icon(Icons.add_circle, color: Colors.green), onPressed: () => setModalState(() => _customIncSec = (_customIncSec + 1).clamp(0, 60)))])
                                 ],
                               ),
                               const SizedBox(height: 10),
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton(
-                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white),
-                                  onPressed: () {
-                                    _setChessTime(_customBaseMin, _customIncSec);
-                                    // Navigator.pop(context); // _setChessTime already pops
-                                  }, 
-                                  child: const Text("START GAME")
-                                ),
-                              )
+                              SizedBox(width: double.infinity, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white), onPressed: () { _setChessTime(_customBaseMin, _customIncSec); Navigator.pop(context); }, child: const Text("START GAME")))
                             ],
                           ),
                         ),
                         const SizedBox(height: 20),
-
                         const Text("QUICK PRESETS", style: TextStyle(color: Colors.white54, fontSize: 12)),
                         const SizedBox(height: 10),
                         Wrap(
                           spacing: 10, runSpacing: 10,
                           children: [
-                            _chessPresetBtn("Bullet 1+0", 1, 0),
-                            _chessPresetBtn("Bullet 1+1", 1, 1),
-                            _chessPresetBtn("Blitz 3+2", 3, 2),
-                            _chessPresetBtn("Blitz 5+0", 5, 0),
-                            _chessPresetBtn("Rapid 10+0", 10, 0),
-                            _chessPresetBtn("Rapid 15+10", 15, 10),
+                            _chessPresetBtn("Bullet 1+0", 1, 0), _chessPresetBtn("Blitz 3+2", 3, 2),
+                            _chessPresetBtn("Rapid 10+0", 10, 0), _chessPresetBtn("Rapid 15+10", 15, 10),
                             _chessPresetBtn("Classical 30+0", 30, 0),
                           ],
                         ),
-                        const SizedBox(height: 30),
-                        const Divider(color: Colors.white24),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 20),
                       ],
 
-                      // --- GENERAL SETTINGS ---
-                      const Text("GENERAL", style: TextStyle(color: Colors.white54, fontSize: 12)),
+                      // --- ALARM ---
+                      const Text("ALARM (VISUAL)", style: TextStyle(color: Colors.white54, fontSize: 12)),
                       const SizedBox(height: 10),
-
-                      // Alarm (Existing)
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(10)),
@@ -380,20 +371,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       ),
                       const SizedBox(height: 15),
 
-                      _buildControlRow("Orientation", 
-                        ElevatedButton.icon(
-                          onPressed: _toggleOrientation,
-                          icon: const Icon(Icons.screen_rotation),
-                          label: Text(_isLandscape ? "Rotate" : "Rotate"),
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[800]),
-                        )
-                      ),
+                      _buildControlRow("Orientation", ElevatedButton.icon(onPressed: _toggleOrientation, icon: const Icon(Icons.screen_rotation), label: Text(_isLandscape ? "Rotate" : "Rotate"), style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[800]))),
                       const SizedBox(height: 15),
-
                       _buildSizeControl("Clock Size", _scaleFactor, (v) { _adjustSize(v); setModalState((){}); }),
                       const SizedBox(height: 15),
                       _buildSizeControl("Info Size", _auxScaleFactor, (v) { _adjustAuxSize(v); setModalState((){}); }),
-
                       const SizedBox(height: 25),
                       const Text("MODE & THEME", style: TextStyle(color: Colors.white54, fontSize: 12)),
                       const SizedBox(height: 10),
@@ -434,8 +416,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _buildControlRow(String label, Widget child) {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      width: double.infinity, padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(10)),
       child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(label, style: const TextStyle(fontWeight: FontWeight.bold)), child]),
     );
@@ -443,8 +424,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _buildSizeControl(String label, double value, Function(double) onAdjust) {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      width: double.infinity, padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(10)),
       child: Column(
         children: [
@@ -464,16 +444,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Widget _chessPresetBtn(String label, int min, int inc) {
-    return ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.white12, foregroundColor: Colors.white), onPressed: () => _setChessTime(min, inc), child: Text(label));
+    return ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.white12, foregroundColor: Colors.white), onPressed: () { _setChessTime(min, inc); Navigator.pop(context); }, child: Text(label));
   }
 
   Widget _modeButton(String title, AppMode mode, Function setModalState) {
     bool isActive = _currentMode == mode;
     return GestureDetector(
-      onTap: () {
-        setState(() => _currentMode = mode);
-        setModalState(() {});
-      },
+      onTap: () { setState(() => _currentMode = mode); setModalState(() {}); },
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(color: isActive ? Colors.blueAccent : Colors.white10, borderRadius: BorderRadius.circular(8)),
@@ -485,13 +462,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget _buildSettingsIcon(IconData icon, String label, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
-      child: Column(
-        children: [
-          CircleAvatar(backgroundColor: Colors.grey[800], radius: 24, child: Icon(icon, color: Colors.white, size: 24)),
-          const SizedBox(height: 5),
-          Text(label, style: const TextStyle(fontSize: 11, color: Colors.white70)),
-        ],
-      ),
+      child: Column(children: [CircleAvatar(backgroundColor: Colors.grey[800], radius: 24, child: Icon(icon, color: Colors.white, size: 24)), const SizedBox(height: 5), Text(label, style: const TextStyle(fontSize: 11, color: Colors.white70))]),
     );
   }
 

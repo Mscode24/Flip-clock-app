@@ -8,7 +8,7 @@ class DigitCard extends StatelessWidget {
   final String? topLabel;
   final String? bottomLeftLabel;
   final String? bottomRightLabel;
-  final double auxScale; // Your aux scale logic
+  final double auxScale;
 
   const DigitCard({
     super.key, 
@@ -31,16 +31,22 @@ class DigitCard extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: theme.cardColor,
+        // APPLY OPACITY HERE
+        color: theme.cardColor.withOpacity(theme.cardOpacity),
         borderRadius: BorderRadius.circular(size * 0.15),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.5), offset: Offset(size*0.02, size*0.02), blurRadius: 10),
+          BoxShadow(
+            // Fade shadow as well
+            color: Colors.black.withOpacity(0.5 * theme.cardOpacity), 
+            offset: Offset(size*0.02, size*0.02), 
+            blurRadius: 10
+          ),
         ],
       ),
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // Top Label (Date/Day)
+          // Top Label
           if (topLabel != null)
             Positioned(
               top: size * 0.06,
@@ -66,16 +72,19 @@ class DigitCard extends StatelessWidget {
           Positioned(
             top: 0, left: 0, right: 0, height: size / 2,
             child: Container(decoration: BoxDecoration(
-                gradient: const LinearGradient(
+                gradient: LinearGradient(
                   begin: Alignment.topCenter, 
                   end: Alignment.bottomCenter, 
-                  colors: [Colors.white10, Colors.transparent]
+                  colors: [
+                    Colors.white.withOpacity(0.1 * theme.cardOpacity), 
+                    Colors.transparent
+                  ]
                 ),
                 borderRadius: BorderRadius.vertical(top: Radius.circular(size * 0.15)),
             )),
           ),
 
-          // Bottom Left (AM/PM)
+          // Bottom Left
           if (bottomLeftLabel != null)
             Positioned(
               bottom: size * 0.06,
@@ -86,7 +95,7 @@ class DigitCard extends StatelessWidget {
               ),
             ),
 
-          // Bottom Right (Seconds)
+          // Bottom Right
           if (bottomRightLabel != null)
             Positioned(
               bottom: size * 0.06,
